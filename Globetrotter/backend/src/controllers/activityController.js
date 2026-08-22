@@ -10,7 +10,7 @@ exports.listActivitiesForCity = catchAsync(async (req, res) => {
   const where = {
     cityId,
     ...(category && { category }),
-    ...(search && { name: { contains: search, mode: 'insensitive' } }),
+    ...(search && { name: { contains: search } }),
     ...(maxCost && { cost: { lte: Number(maxCost) } }),
     ...(maxDuration && { durationMin: { lte: Number(maxDuration) } }),
   };

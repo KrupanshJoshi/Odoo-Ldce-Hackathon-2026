@@ -7,9 +7,9 @@ exports.searchCities = catchAsync(async (req, res) => {
   const { search, country, region, sort = 'popularity', page = 1, limit = 20 } = req.query;
 
   const where = {
-    ...(search && { name: { contains: search, mode: 'insensitive' } }),
-    ...(country && { country: { equals: country, mode: 'insensitive' } }),
-    ...(region && { region: { equals: region, mode: 'insensitive' } }),
+    ...(search && { name: { contains: search } }),
+    ...(country && { country: { equals: country } }),
+    ...(region && { region: { equals: region } }),
   };
 
   const orderBy =
