@@ -1,0 +1,173 @@
+// GlobeTrotter — Relational schema
+// Maps directly to the 13 screens in the problem statement:
+// Users -> Trips -> TripStops (cities) -> TripActivities (things to do)
+// plus a City/Activity catalog to search against, and Expense rows for budget.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ---------- Screen 1/12: Login/Signup, Profile & Settings ----------
+model User {
+  id             String   @id @default(uuid())
+  name           String
+  email          String   @unique
+  passwordHash   String
+  photoUrl       String?
+  languagePref   String   @default("en")
+  role           String   @default("USER")
+  resetToken     String?
+  resetTokenExp  DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  trips          Trip[]
+  savedCities    SavedCity[]
+
+  @@map("users")
+}
+
+// User's "saved destinations list" (Profile screen)
+model SavedCity {
+  id       String @id @default(uuid())
+  userId   String
+  cityId   String
+  savedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  city City @relation(fields: [cityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cityId])
+  @@map("saved_cities")
+}
+
+// ---------- Screen 3/4: Create Trip, My Trips ----------
+model Trip {
+  id           String   @id @default(uuid())
+  userId       String
+  name         String
+  description  String?
+  startDate    DateTime
+  endDate      DateTime
+  coverPhotoUrl String?
+  isPublic     Boolean  @default(false)
+  shareSlug    String?  @unique   // set when user shares the trip
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stops    TripStop[]
+  expenses Expense[]
+  copiedFromId String?
+  copiedFrom   Trip?   @relation("TripCopies", fields: [copiedFromId], references: [id])
+  copies       Trip[]  @relation("TripCopies")
+
+  @@index([userId])
+  @@map("trips")
+}
+
+// ---------- Screen 7: City Search / catalog ----------
+model City {
+  id          String   @id @default(uuid())
+  name        String
+  country     String
+  region      String?
+  costIndex   Int      @default(50)   // 0-100 relative cost index, used for budget estimates
+  popularity  Int      @default(0)    // used for "recommended destinations"
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+
+  stops       TripStop[]
+  activities  Activity[]
+  savedBy     SavedCity[]
+
+  @@unique([name, country])
+  @@index([country])
+  @@index([popularity])
+  @@map("cities")
+}
+
+// ---------- Screen 5: Itinerary Builder (a "stop" = a city leg of the trip) ----------
+model TripStop {
+  id            String   @id @default(uuid())
+  tripId        String
+  cityId        String
+  arrivalDate   DateTime
+  departureDate DateTime
+  orderIndex    Int      // drag-to-reorder position within the trip
+  createdAt     DateTime @default(now())
+
+  trip       Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  city       City             @relation(fields: [cityId], references: [id])
+  activities TripActivity[]
+  expenses   Expense[]
+
+  @@index([tripId])
+  @@map("trip_stops")
+}
+
+// ---------- Screen 8: Activity Search (catalog, per city) ----------
+model Activity {
+  id          String            @id @default(uuid())
+  cityId      String
+  name        String
+  category    String            @default("OTHER")
+  cost        Float
+  durationMin Int               @default(60)
+  description String?
+  imageUrl    String?
+  createdAt   DateTime          @default(now())
+
+  city          City           @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  tripActivities TripActivity[]
+
+  @@index([cityId])
+  @@index([category])
+  @@map("activities")
+}
+
+// ---------- Screen 5/6: Activities assigned to a trip stop (day-wise plan) ----------
+model TripActivity {
+  id             String            @id @default(uuid())
+  tripStopId     String
+  activityId     String?           // null when it's a custom, user-typed activity
+  customName     String?
+  category       String            @default("OTHER")
+  scheduledDate  DateTime
+  scheduledTime  String?           // "14:30" — kept as string to avoid timezone issues
+  cost           Float             @default(0)
+  notes          String?
+  createdAt      DateTime          @default(now())
+
+  tripStop TripStop  @relation(fields: [tripStopId], references: [id], onDelete: Cascade)
+  activity Activity? @relation(fields: [activityId], references: [id])
+
+  @@index([tripStopId])
+  @@index([scheduledDate])
+  @@map("trip_activities")
+}
+
+// ---------- Screen 9: Trip Budget & Cost Breakdown ----------
+// Non-activity spend (transport/stay/meals/other). Activity spend is read
+// from TripActivity.cost, so the budget screen unions both sources.
+model Expense {
+  id         String          @id @default(uuid())
+  tripId     String
+  tripStopId String?
+  category   String
+  amount     Float
+  note       String?
+  date       DateTime?
+  createdAt  DateTime        @default(now())
+
+  trip     Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  tripStop TripStop? @relation(fields: [tripStopId], references: [id], onDelete: SetNull)
+
+  @@index([tripId])
+  @@map("expenses")
+}
